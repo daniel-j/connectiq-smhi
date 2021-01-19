@@ -1,0 +1,40 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the README at:
+// https://github.com/microsoft/vscode-dev-containers/tree/v0.154.2/containers/ubuntu
+{
+	"name": "Connect IQ",
+	"build": {
+		"dockerfile": "Dockerfile",
+		// Update 'VARIANT' to pick an Ubuntu version: focal, bionic
+		"args": { "VARIANT": "focal" }
+	},
+
+	"mounts": [
+		"type=bind,source=/tmp/.X11-unix,target=/tmp/.X11-unix",
+		//"type=bind,source=${localWorkspaceFolder}/.Garmin,target=/home/vscode/.Garmin"
+	],
+
+	"remoteEnv": {
+		"DISPLAY": "unix${localEnv:DISPLAY}"
+	},
+
+	// Set *default* container specific settings.json values on container create.
+	"settings": { 
+		"terminal.integrated.shell.linux": "/bin/bash",
+		"monkeyC.developerKeyPath": "${containerWorkspaceFolder}/developer_key.der"
+	},
+
+	// Add the IDs of extensions you want installed when the container is created.
+	"extensions": ["garmin.monkey-c"],
+
+	// Use 'forwardPorts' to make a list of ports inside the container available locally.
+	// "forwardPorts": [],
+
+	//"initializeCommand": "mkdir -p .Garmin/ConnectIQ && echo /opt/sdk-manager/bin/sdkmanager > .Garmin/ConnectIQ/sdkmanager-location.cfg",
+	"initializeCommand": "mkdir -p ~/.Garmin/ConnectIQ && echo /opt/sdk-manager/bin/sdkmanager > ~/.Garmin/ConnectIQ/sdkmanager-location.cfg",
+
+	// Use 'postCreateCommand' to run commands after the container is created.
+	"postCreateCommand": "if [ ! -f developer_key.der ]; then openssl genrsa -out developer_key.pem 4096 && openssl pkcs8 -topk8 -inform PEM -outform DER -in developer_key.pem -out developer_key.der -nocrypt; fi",
+
+	// Comment out connect as root instead. More info: https://aka.ms/vscode-remote/containers/non-root.
+	"remoteUser": "vscode"
+}

@@ -31,7 +31,7 @@ outlines = Image.open("assets/outlines.png")
 
 port = 8008
 
-font = ImageFont.truetype("/usr/share/fonts/TTF/DejaVuSans.ttf", 12)
+font = ImageFont.truetype("/usr/share/fonts/TTF/DejaVuSans-Bold.ttf", 14)
 
 source = osr.SpatialReference()
 source.ImportFromEPSG(4326)
@@ -65,6 +65,7 @@ def getHistory(count = 6):
     return files[-count:]
 
 def cacheFile(item, formats=['png', 'tif']):
+    item['valid_dt'] = datetime.strptime(item['valid'], '%Y-%m-%d %H:%M')
     for fmt in item['formats']:
         if fmt['key'] in formats:
             url = fmt['link']
@@ -150,7 +151,10 @@ def generateImage(item, lat, lon, scale = 1, screenWidth = 240, screenHeight = 2
     drawCircle(draw, screenWidth / 2, screenHeight / 2, radius*30, "#F90")
     drawCircle(draw, screenWidth / 2, screenHeight / 2, radius*50, "#0D0")
     drawCircle(draw, screenWidth / 2, screenHeight / 2, radius*70, "#00D")
-    drawCenteredText(draw, item['valid'].replace(" ", "\n"), screenWidth, screenHeight - 40)
+    print(item['valid'])
+    totalMinute, second = divmod((datetime.utcnow() - item['valid_dt']).seconds, 60)
+    hour, minute = divmod(totalMinute, 60)
+    drawCenteredText(draw, str(minute) + " min ago", screenWidth, screenHeight - 40)
     overlayImg = overlayImg.resize((screenWidth, screenHeight), Image.LANCZOS)
 
     newImage.paste(overlayImg, (0, 0), overlayImg)

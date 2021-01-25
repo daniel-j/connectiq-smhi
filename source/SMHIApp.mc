@@ -6,7 +6,7 @@ using Toybox.Position;
 (:glance)
 class SMHIApp extends Application.AppBase {
 
-    var mainView, glanceView;
+    var mainView, glanceView, mainDelegate;
 
     function initialize() {
         AppBase.initialize();
@@ -37,7 +37,8 @@ class SMHIApp extends Application.AppBase {
     // Return the initial view of your application here
     function getInitialView() {
         mainView = new SMHIView();
-        return [ mainView ];
+        mainDelegate = new SMHIDelegate();
+        return [ mainView, mainDelegate ];
     }
 
     function getGlanceView() {

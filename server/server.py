@@ -139,13 +139,13 @@ def generateImage(item, lat, lon, zoom = 7, screenWidth = 240, screenHeight = 24
     else:
         newImage = Image.new("RGB", (screenWidth, screenHeight), "#AAA")
 
-    
-
     radarLayer = Image.new("RGBA", (width, height))
     if not pretty:
         radarLayer.paste(basemap, (0, 0))
         radarLayer.paste(outlines, (0, 0), outlines)
     radarLayer.paste(im, (0, 0), im)
+
+    print("Zoom level: ", zoom)
 
     scale = Spixel * 2 # 1 px = 2 km
     scaleW = screenWidth / scale

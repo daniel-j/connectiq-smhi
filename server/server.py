@@ -16,6 +16,9 @@ import geoio
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import urllib.parse
 
+from staticmap import StaticMap, CircleMarker
+import math
+
 apiBaseUrl = 'https://opendata-download-radar.smhi.se'
 
 infoUrl = apiBaseUrl + '/api/version/latest/area/sweden/product/comp'
@@ -101,15 +104,13 @@ def updateCache(count=6):
     cleanCache(count)
 
 
-def generateImage(item, lat, lon, scale = 1, screenWidth = 240, screenHeight = 240):
+def generateImage(item, lat, lon, zoom = 7, screenWidth = 240, screenHeight = 240, pretty=False):
 
-    scaleW = screenWidth / scale
-    scaleH = screenHeight / scale
+    tileSize = 256
+    C = 40075.016686 # in km
+    Stile = C * math.cos(math.radians(lat)) / (2 ** zoom)
+    Spixel = tileSize / Stile
 
-    sizeMin = min(screenWidth, screenHeight)
-    sizeMax = max(screenWidth, screenHeight)
-    scaleMin = min(scaleW, scaleH)
-    radius = sizeMin / scaleMin / 2 # 1 km
 
     print("WGS84        N " + str(lat) + ", E " + str(lon))
     point = ogr.CreateGeometryFromJson(json.dumps({'type': 'Point', 'coordinates': [lat, lon]}))
@@ -117,8 +118,6 @@ def generateImage(item, lat, lon, scale = 1, screenWidth = 240, screenHeight = 2
     [swelat, swelon] = json.loads(point.ExportToJson())['coordinates']
     print("SWEREF 99 TM N " + str(swelat) + ", E " + str(swelon))
 
-    #print("Fetching " + infoUrl)
-    #info = requests.get(url=infoUrl).json()['lastFiles'][0]
     for fmt in item['formats']:
         if fmt['key'] == 'png':
             radarPngImg = fmt['image']
@@ -131,33 +130,59 @@ def generateImage(item, lat, lon, scale = 1, screenWidth = 240, screenHeight = 2
     im = radarPngImg
     width = im.width
     height = im.height
+
+    if pretty:
+        m = StaticMap(screenWidth, screenHeight, 0, 0, "http://a.tile.osm.org/{z}/{x}/{y}.png", tileSize)
+        marker = CircleMarker((lon, lat), "#F00", 0)
+        m.add_marker(marker)
+        newImage = m.render(zoom=int(zoom))
+    else:
+        newImage = Image.new("RGB", (screenWidth, screenHeight), "#AAA")
+
     
-    newImage = Image.new("RGBA", (width, height), (255, 255, 255, 0))
 
-    newImage.paste(basemap, (0, 0), basemap)
-    newImage.paste(outlines, (0, 0), outlines)
-    newImage.paste(im, (0, 0), im)
+    radarLayer = Image.new("RGBA", (width, height))
+    if not pretty:
+        radarLayer.paste(basemap, (0, 0))
+        radarLayer.paste(outlines, (0, 0), outlines)
+    radarLayer.paste(im, (0, 0), im)
 
-    box = (centerx - scaleW / 2, centery - scaleH / 2, centerx + scaleW / 2, centery + scaleH / 2)
-    croppedImage = newImage.crop(box)
-    newImage = Image.new("RGB", croppedImage.size, "#ccc")
-    newImage.paste(croppedImage, (0, 0), croppedImage)
-    newImage = newImage.resize((screenWidth, screenHeight), Image.NEAREST)
+    scale = Spixel * 2 # 1 px = 2 km
+    scaleW = screenWidth / scale
+    scaleH = screenHeight / scale
 
-    overlayImg = Image.new("RGBA", (screenWidth, screenHeight), (255, 255, 255, 0))
-    draw = ImageDraw.Draw(overlayImg)
-    drawCircle(draw, screenWidth / 2, screenHeight / 2, 1, "#C00")
+
+    sizeMin = min(screenWidth, screenHeight)
+    sizeMax = max(screenWidth, screenHeight)
+    scaleMin = min(scaleW, scaleH)
+    radius = sizeMin / scaleMin / 2
+
+    x = math.floor(centerx - scaleW / 2)
+    y = math.floor(centery - scaleH / 2)
+    w = math.ceil(scaleW) + 1
+    h = math.ceil(scaleH) + 1
+
+    resX = -math.floor(((centerx - scaleW / 2) % 1) * scale)
+    resY = -math.floor(((centery - scaleH / 2) % 1) * scale)
+    resWidth = math.floor(w * scale)
+    resHeight = math.floor(h * scale)
+
+    box = (x, y, x + w, y + h)
+
+    radarLayer = radarLayer.crop(box)
+    radarLayer = radarLayer.resize((resWidth, resHeight), Image.NEAREST)
+    newImage.paste(radarLayer, (resX, resY), radarLayer)
+
+    draw = ImageDraw.Draw(newImage)
+    drawCircle(draw, screenWidth / 2, screenHeight / 2, radius*1, "#C00")
     drawCircle(draw, screenWidth / 2, screenHeight / 2, radius*10, "#F00")
     drawCircle(draw, screenWidth / 2, screenHeight / 2, radius*30, "#F90")
-    drawCircle(draw, screenWidth / 2, screenHeight / 2, radius*50, "#0D0")
-    drawCircle(draw, screenWidth / 2, screenHeight / 2, radius*70, "#00D")
+    drawCircle(draw, screenWidth / 2, screenHeight / 2, radius*50, "#0C0")
+    drawCircle(draw, screenWidth / 2, screenHeight / 2, radius*70, "#00F")
     print(item['valid'])
     totalMinute, second = divmod((datetime.utcnow() - item['valid_dt']).seconds, 60)
     hour, minute = divmod(totalMinute, 60)
     drawCenteredText(draw, str(minute) + " min ago", screenWidth, screenHeight - 40)
-    overlayImg = overlayImg.resize((screenWidth, screenHeight), Image.LANCZOS)
-
-    newImage.paste(overlayImg, (0, 0), overlayImg)
 
     return newImage
 
@@ -169,11 +194,12 @@ class Server(BaseHTTPRequestHandler):
         if info.path == '/radar':
             print(info, query)
             position = int(query['position'][0]) if 'position' in query else 0
+            pretty = 'pretty' in query and int(query['pretty'][0]) == 1
 
             updateCache(1)
 
             item = list(cache.values())[position - 1]
-            img = generateImage(item, float(query['lat'][0]), float(query['lon'][0]), float(query['scale'][0]), int(query['screenWidth'][0]), int(query['screenHeight'][0]))
+            img = generateImage(item, float(query['lat'][0]), float(query['lon'][0]), float(query['scale'][0]), int(query['screenWidth'][0]), int(query['screenHeight'][0]), pretty)
 
             self.send_response(200)
             self.send_header("Content-type", "image/png")
@@ -193,10 +219,6 @@ class Server(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     httpd = HTTPServer(('', port), Server)
-
-    #img = generateImage(cache["radar_2101251345"], 57.719599, 11.993140, 4, 240, 240)
-    #img.show()
-    #print(img)
     
     print('Starting http server on port %d...' % port)
     try:

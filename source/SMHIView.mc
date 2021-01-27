@@ -10,7 +10,7 @@ class SMHIView extends WatchUi.View {
     hidden var radarImage = null;
     hidden var posInfo = null;
     hidden var myLocation = null;
-    hidden var zoomLevel = 4;
+    hidden var zoomLevel = 7;
 
     function initialize() {
         View.initialize();
